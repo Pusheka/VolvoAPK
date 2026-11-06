@@ -19,6 +19,7 @@ android.api = 34
 android.minapi = 21
 android.archs = arm64-v8a
 android.accept_sdk_license = True
+android.skip_update = True
 
 # Използваме стабилни версии, за да не се бъгне компилацията
 android.ndk = 25b
