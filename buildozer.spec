@@ -9,7 +9,7 @@ source.include_exts = py,png,jpg,kv,html,js,css,json
 
 version = 1.0.0
 # ДОБАВЯМЕ kivy_garden.webview за HTML екрана!
-requirements = python3==3.10.12,kivy==2.3.0,pyjnius,android
+requirements = python3,kivy==2.3.0,pyjnius,android
 
 orientation = portrait
 fullscreen = 0
