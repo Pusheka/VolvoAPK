@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Volvo Telematics Pro</title>
+<style>
+:root{--bg:#0a0a0a;--card:#141414;--accent:#00e5ff;--text:#eee;--danger:#ff3366;--warn:#ffaa00;--ok:#00ff88}
+body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--text);margin:0;padding:0;user-select:none}
+.nav{display:flex;justify-content:space-around;background:#000;padding:12px 0;position:sticky;top:0;z-index:10;border-bottom:2px solid #222;overflow-x:auto}
+.nav div{color:#888;font-weight:bold;cursor:pointer;padding:6px 10px;border-radius:20px;font-size:12px;white-space:nowrap}
+.nav .active{color:#000;background:var(--accent)}
+.tab{display:none;padding:15px}
+.tab.active{display:block}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+@media(min-width:600px){.grid{grid-template-columns:repeat(4,1fr)}}
+.card{background:var(--card);border-radius:10px;padding:12px;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,.5);border:1px solid #222}
+.val{font-size:26px;font-weight:900;margin:6px 0;color:var(--accent)}
+.lbl{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.5px}
+.sub{font-size:11px;color:#aaa;margin-top:2px}
+.danger{color:var(--danger)!important}
+.warn{color:var(--warn)!important}
+.ok{color:var(--ok)!important}
+.bar-bg{background:#222;height:8px;border-radius:4px;margin-top:8px;overflow:hidden}
+.bar-fill{background:var(--accent);height:100%;width:0%;transition:.2s}
+button{background:var(--accent);color:#000;font-weight:900;padding:14px;width:100%;border:none;border-radius:6px;margin-top:12px;font-size:15px;cursor:pointer;text-transform:uppercase}
+button.off{background:#444;color:#ccc}
+button.locked{background:var(--danger);color:#fff}
+h3{border-bottom:1px solid #333;padding-bottom:8px;margin-top:0;font-size:16px;color:var(--accent)}
+#status-bar{background:#00bcd4;color:#000;padding:8px;text-align:center;font-weight:bold;font-size:13px;}
+</style>
+</head>
+<body>
+<div id="status-bar">Bluetooth: Търсене на устройство...</div>
+
+<div class="nav">
+<div id="btn-dash" class="active" onclick="switchTab('dash')">DASH</div>
+<div id="btn-trip" onclick="switchTab('trip')">TRIP</div>
+<div id="btn-drag" onclick="switchTab('drag')">DRAG</div>
+<div id="btn-awd" onclick="switchTab('awd')">AWD</div>
+<div id="btn-dtc" onclick="switchTab('dtc')">DTC</div>
+<div id="btn-set" onclick="switchTab('set')">SETUP</div>
+</div>
+
+<div id="tab-dash" class="tab active">
+<div class="grid">
+<div class="card"><div class="lbl">Boost (Bar)</div><div class="val" id="v-boost">0.00</div><div class="bar-bg"><div class="bar-fill" id="b-boost"></div></div></div>
+<div class="card"><div class="lbl">AFR</div><div class="val" id="v-afr">14.7</div><div class="sub" id="v-fuelmode">PETROL</div></div>
+<div class="card"><div class="lbl">Engine RPM</div><div class="val" id="v-rpm">0</div></div>
+<div class="card"><div class="lbl">Speed & Gear</div><div class="val" id="v-spd">0 <span style="font-size:16px">km/h</span></div><div class="sub">Gear: <span id="v-gear" style="color:var(--accent);font-weight:bold">N</span></div></div>
+<div class="card"><div class="lbl">Coolant</div><div class="val" id="v-ect">85&deg;C</div></div>
+<div class="card"><div class="lbl">ATF</div><div class="val" id="v-atf">75&deg;C</div></div>
+<div class="card"><div class="lbl">Battery</div><div class="val" id="v-volt">14.1V</div></div>
+<div class="card"><div class="lbl">LPG Mode</div><div class="val" id="v-lpg">OFF</div></div>
+</div>
+</div>
+
+<div id="tab-trip" class="tab">
+<div class="card"><h3>Trip Computer</h3>
+<p>Информацията за пътуването се синхронизира автоматично от ESP32.</p>
+</div>
+</div>
+
+<div id="tab-drag" class="tab">
+<div class="card"><h3>Drag Telemetry</h3>
+<p>Измерване 0-100 km/h, 0-200 km/h и 402m през CAN данни.</p>
+</div>
+</div>
+
+<div id="tab-awd" class="tab">
+<div class="card"><h3>AWD / Haldex Control</h3>
+<button id="btnLock" class="off" onclick="sendCmd('HALDEX_LOCK')">FORCE LOCK (P2)</button>
+</div>
+</div>
+
+<div id="tab-dtc" class="tab">
+<div class="card"><h3>Диагностика (DTC)</h3>
+<button style="background:var(--danger);color:#fff" onclick="sendCmd('CLEAR_DTC')">Изчисти грешките (Clear DTC)</button>
+</div>
+</div>
+
+<div id="tab-set" class="tab">
+<div class="card" style="text-align:left">
+<h3>Bluetooth OTA Firmware Update</h3>
+<p style="font-size:12px;color:#aaa">Изберете нов .bin файл от паметта на телефона за качване по Bluetooth:</p>
+<input type="file" id="otaFile" accept=".bin" style="margin-bottom:10px;width:100%;">
+<button onclick="startBluetoothOTA()" style="background:var(--warn);color:#000;">СТАРТИРАЙ BLUETOOTH OTA</button>
+</div>
+</div>
+
+<script>
+function switchTab(t){
+  document.querySelectorAll('.tab').forEach(e=>e.classList.remove('active'));
+  document.querySelectorAll('.nav div').forEach(e=>e.classList.remove('active'));
+  document.getElementById('tab-'+t).classList.add('active');
+  document.getElementById('btn-'+t).classList.add('active');
+}
+
+function setStatus(text, isError=false){
+  let sb = document.getElementById('status-bar');
+  sb.innerText = text;
+  sb.style.background = isError ? 'var(--danger)' : 'var(--accent)';
+  sb.style.color = isError ? '#fff' : '#000';
+}
+
+function updateData(jsonStr){
+  try {
+    let d = JSON.parse(jsonStr);
+    if(d.rpm !== undefined) document.getElementById('v-rpm').innerText = d.rpm;
+    if(d.spd !== undefined) document.getElementById('v-spd').innerHTML = d.spd + ' <span style="font-size:16px">km/h</span>';
+    if(d.bst !== undefined) {
+      document.getElementById('v-boost').innerText = d.bst.toFixed(2);
+      document.getElementById('b-boost').style.width = Math.min(d.bst/1.5*100,100)+'%';
+    }
+    if(d.afr !== undefined) document.getElementById('v-afr').innerText = d.afr.toFixed(1);
+    if(d.ect !== undefined) document.getElementById('v-ect').innerHTML = d.ect + '&deg;C';
+    if(d.atf !== undefined) document.getElementById('v-atf').innerHTML = d.atf + '&deg;C';
+    if(d.v !== undefined) document.getElementById('v-volt').innerText = d.v.toFixed(1) + 'V';
+    if(d.gr !== undefined) document.getElementById('v-gear').innerText = d.gr == 0 ? 'N' : d.gr;
+    if(d.lpg !== undefined) document.getElementById('v-lpg').innerText = d.lpg ? 'ON' : 'OFF';
+  } catch(e){}
+}
+
+function sendCmd(cmd){
+  if(window.AndroidBridge){
+    window.AndroidBridge.sendCommand(cmd);
+  }
+}
+
+function startBluetoothOTA(){
+  let fileInput = document.getElementById('otaFile');
+  if(!fileInput.files.length){
+    alert('Моля, изберете .bin файл първо!');
+    return;
+  }
+  let file = fileInput.files[0];
+  let reader = new FileReader();
+  reader.onload = function(e){
+    let arrayBuffer = e.target.result;
+    let bytes = new Uint8Array(arrayBuffer);
+    // Предаване на файловия масив към Android/Python моста
+    if(window.AndroidBridge){
+      window.AndroidBridge.sendOTAFile(bytes.length, Array.from(bytes));
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+</script>
+</body>
+</html>
