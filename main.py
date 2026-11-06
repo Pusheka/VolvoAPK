@@ -1,97 +1,83 @@
 import os
-import time
-import json
 import threading
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.uix.boxlayout import BoxLayout
-
-# ВАЖНО: Използваме kivy_garden.webview вместо несъществуващия kivy.uix.webbrowser
-from kivy_garden.webview import WebView
+from kivy.uix.label import Label
 
 try:
     from jnius import autoclass
+    from android.runnable import run_on_ui_thread
+    
+    # Android класове
+    PythonActivity = autoclass('org.kivy.android.PythonActivity')
+    WebView = autoclass('android.webkit.WebView')
+    WebViewClient = autoclass('android.webkit.WebViewClient')
     BluetoothAdapter = autoclass('android.bluetooth.BluetoothAdapter')
-    BluetoothDevice = autoclass('android.bluetooth.BluetoothDevice')
     java_uuid = autoclass('java.util.UUID').fromString("00001101-0000-1000-8000-00805F9B34FB")
     IS_ANDROID = True
 except Exception as e:
-    print(f"Bluetooth init error: {e}")
+    print(f"Грешка при инициализация: {e}")
     IS_ANDROID = False
-
-class JsBridge:
-    """Този клас свързва JavaScript с Python"""
-    def __init__(self, app):
-        self.app = app
-        
-    def sendCommand(self, cmd):
-        print(f"Команда от JS: {cmd}")
-        # Тук можеш да добавиш логика за изпращане на команда по Bluetooth
-        if self.app.is_connected and self.app.output_stream:
-            try:
-                self.app.output_stream.write((cmd + "\n").encode('utf-8'))
-                self.app.output_stream.flush()
-            except Exception as e:
-                print(f"Грешка при изпращане: {e}")
-
-    def sendOTAFile(self, length, byte_array):
-        print(f"Получен OTA файл с размер: {length} байта")
-        # Тук добави логика за OTA ъпдейт
 
 class VolvoTelematicsApp(App):
     def build(self):
         self.title = "Volvo Telematics Pro"
         self.layout = BoxLayout(orientation='vertical')
         
-        # 1. Зареждане на HTML файла
-        html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'index.html')
-        if not os.path.exists(html_path):
-            # Ако файлът не е в assets, го търсим в главната папка
-            html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'index.html')
-
-        self.webview = WebView(url="file://" + html_path)
-        
-        # 2. Свързване на JS Bridge (ВАЖНО!)
-        self.webview.bind(on_load=self.on_webview_load)
-        self.layout.add_widget(self.webview)
+        # Място за WebView (зарежда се след малко)
+        self.placeholder = Label(text="Зареждане на интерфейса...")
+        self.layout.add_widget(self.placeholder)
         
         self.bt_socket = None
         self.output_stream = None
         self.is_connected = False
         
         if IS_ANDROID:
+            Clock.schedule_once(self.setup_android_webview, 0.5)
             threading.Thread(target=self.init_bluetooth, daemon=True).start()
         else:
-            Clock.schedule_once(lambda dt: self.update_status("Симулация (Само за Android)"), 1)
+            self.placeholder.text = "Симулация (Само за Android)"
             
         return self.layout
 
-    def on_webview_load(self, webview, url):
-        # Инжектираме нашия Python обект в JavaScript
-        self.webview.evaluate_javascript("""
-            window.AndroidBridge = {
-                sendCommand: function(cmd) { 
-                    window.location.href = 'py://sendCommand/' + cmd; 
-                },
-                sendOTAFile: function(len, arr) { 
-                    window.location.href = 'py://ota/' + len; 
-                }
-            };
-        """)
-        print("WebView зареден и Bridge инжектиран.")
+    @run_on_ui_thread
+    def setup_android_webview(self, dt):
+        try:
+            # 1. Създаваме WebView
+            self.webview = WebView(PythonActivity.mActivity)
+            self.webview.getSettings().setJavaScriptEnabled(True)
+            self.webview.setWebViewClient(WebViewClient())
+            
+            # 2. Зареждаме HTML файла
+            html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'index.html')
+            if not os.path.exists(html_path):
+                html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'index.html')
+            self.webview.loadUrl("file://" + html_path)
+            
+            # 3. Вграждаме WebView в Android Layout (най-сигурният начин)
+            activity = PythonActivity.mActivity
+            layout = activity.getWindow().getDecorView().findViewById(0x01020002) # android.R.id.content
+            layout.addView(self.webview)
+            
+            # Махаме Kivy placeholder-а (оставяме WebView да заеме целия екран)
+            self.layout.remove_widget(self.placeholder)
+            
+        except Exception as e:
+            print(f"Грешка при създаване на WebView: {e}")
+            self.placeholder.text = f"Грешка: {e}"
 
     def update_status(self, text, is_error=False):
         err_flag = "true" if is_error else "false"
-        # Извикваме JS функцията setStatus в HTML-а
         js_code = f"setStatus('{text}', {err_flag});"
-        if hasattr(self, 'webview'):
-            self.webview.evaluate_javascript(js_code)
+        if hasattr(self, 'webview') and IS_ANDROID:
+            self.webview.evaluateJavascript(js_code, None)
 
     def send_js_data(self, json_str):
         safe_str = json_str.replace("'", "\\'")
         js_code = f"updateData('{safe_str}');"
-        if hasattr(self, 'webview'):
-            self.webview.evaluate_javascript(js_code)
+        if hasattr(self, 'webview') and IS_ANDROID:
+            self.webview.evaluateJavascript(js_code, None)
 
     def init_bluetooth(self):
         Clock.schedule_once(lambda dt: self.update_status("Търсене на Volvo-Telematics-BT..."), 0)
