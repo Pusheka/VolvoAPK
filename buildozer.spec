@@ -18,6 +18,7 @@ android.permissions = BLUETOOTH, BLUETOOTH_ADMIN, BLUETOOTH_CONNECT, INTERNET, R
 android.api = 34
 android.minapi = 21
 android.archs = arm64-v8a
+android.accept_sdk_license = True
 
 # Използваме стабилни версии, за да не се бъгне компилацията
 android.ndk = 25b
