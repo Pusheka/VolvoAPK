@@ -16,6 +16,8 @@ jobs:
         pip3 install --upgrade buildozer cython virtualenv
     - name: Accept Licenses
       run: yes | $ANDROID_HOME/tools/bin/sdkmanager --licenses || true
+    - name: Clean Buildozer Cache
+      run: rm -rf ~/.buildozer
     - name: Build with Buildozer
       run: buildozer android debug
     - name: Upload APK
