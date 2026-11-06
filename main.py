@@ -100,7 +100,7 @@ class VolvoTelematicsApp(App):
 
             Clock.schedule_once(lambda dt: self.update_status(f"Свързване с {target_device.getName()}..."), 0)
             
-            self.bt_socket = target_device.createRfcommSocketToServiceRecord(java_uuid)
+            self.bt_socket = target_device.createInsecureRfcommSocketToServiceRecord(java_uuid)
             adapter.cancelDiscovery()
             self.bt_socket.connect()
             
