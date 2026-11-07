@@ -25,11 +25,6 @@ jobs:
     - name: Clean Buildozer Cache
       run: rm -rf ~/.buildozer
 
-    - name: Accept Android Licenses
-      run: |
-        mkdir -p ~/.buildozer/android/platform/android-sdk
-        yes | ~/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager --licenses || true
-
     - name: Build with Buildozer
       run: buildozer -v android debug
 
